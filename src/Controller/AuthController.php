@@ -26,10 +26,23 @@ class AuthController extends AbstractController
         private readonly ValidatorInterface $validator
     ) {}
 
-    #[Route('/login_check', name: 'api_login_check', methods: ['POST'])]
+    #[Route('/login_check', name: 'api_login_check', methods: ['POST', 'OPTIONS'])]
     public function loginCheck(Request $request, UserPasswordHasherInterface $passwordHasher): JsonResponse
     {
+        if ($request->getMethod() === 'OPTIONS') {
+            return new JsonResponse([], Response::HTTP_OK, [
+                'Access-Control-Allow-Origin' => '*',
+                'Access-Control-Allow-Methods' => 'POST, OPTIONS',
+                'Access-Control-Allow-Headers' => 'Content-Type, Authorization',
+            ]);
+        }
+
         $data = json_decode($request->getContent(), true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return new JsonResponse(['error' => 'Invalid JSON'], Response::HTTP_BAD_REQUEST);
+        }
+
         $email = $data['email'] ?? null;
         $password = $data['password'] ?? null;
 
@@ -43,7 +56,11 @@ class AuthController extends AbstractController
             return new JsonResponse(['error' => 'Invalid credentials'], Response::HTTP_UNAUTHORIZED);
         }
 
-        $token = $this->jwtManager->create($user);
+        try {
+            $token = $this->jwtManager->create($user);
+        } catch (\Exception $e) {
+            return new JsonResponse(['error' => 'Token generation failed: ' . $e->getMessage()], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
 
         return new JsonResponse([
             'token' => $token,
@@ -52,6 +69,10 @@ class AuthController extends AbstractController
                 'email' => $user->getEmail(),
                 'roles' => $user->getRoles(),
             ],
+        ], Response::HTTP_OK, [
+            'Access-Control-Allow-Origin' => '*',
+            'Access-Control-Allow-Methods' => 'POST, OPTIONS',
+            'Access-Control-Allow-Headers' => 'Content-Type, Authorization',
         ]);
     }
 
